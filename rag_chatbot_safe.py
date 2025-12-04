@@ -13,7 +13,7 @@ from collections import Counter
 load_dotenv()
 
 class SafeRAGChatbot:
-    def __init__(self, vector_db_dir='vector_db', top_k=3):
+    def __init__(self, vector_db_dir='vector_db', top_k=5):
         """Initialize the Safe RAG Chatbot - loads embeddings once, uses keyword search."""
         self.vector_db_dir = vector_db_dir
         self.top_k = top_k
@@ -105,7 +105,7 @@ class SafeRAGChatbot:
             self.embedding_model = None
     
     def _keyword_search(self, query, top_k=None):
-        """Fallback keyword-based search if embeddings fail."""
+        """Keyword-based search with fuzzy matching."""
         if top_k is None:
             top_k = self.top_k
         
@@ -114,14 +114,26 @@ class SafeRAGChatbot:
         
         scored_docs = []
         for idx, doc_meta in enumerate(self.metadata):
-            # Search in question, category, and article
-            search_text = f"{doc_meta.get('question', '')} {doc_meta.get('category', '')} {doc_meta.get('article', '')[:500]}".lower()
+            # Search in question, category, and article (more of the article for better matching)
+            search_text = f"{doc_meta.get('question', '')} {doc_meta.get('category', '')} {doc_meta.get('article', '')[:1000]}".lower()
             search_words = set(search_text.split()) - self.stop_words
             
             # Calculate overlap
             overlap = len(query_words.intersection(search_words))
-            if overlap > 0:
-                score = overlap / max(len(query_words), 1)
+            
+            # Also check for partial word matches (e.g., "hourly" matches "hour")
+            partial_matches = 0
+            for q_word in query_words:
+                for s_word in search_words:
+                    if len(q_word) > 3 and len(s_word) > 3:
+                        if q_word in s_word or s_word in q_word:
+                            partial_matches += 0.5
+                            break
+            
+            total_score = overlap + partial_matches
+            
+            if total_score > 0:
+                score = total_score / max(len(query_words), 1)
                 scored_docs.append((score, idx))
         
         # Sort and return top k
@@ -137,13 +149,15 @@ class SafeRAGChatbot:
         return results
     
     def retrieve_documents(self, query, top_k=None):
-        """Retrieve relevant documents - uses keyword search by default for stability."""
+        """Retrieve relevant documents - uses keyword search with LLM query expansion."""
         if top_k is None:
             top_k = self.top_k
         
-        # Use keyword search as primary method (more stable)
-        # Only try embeddings if explicitly needed (commented out for now)
-        return self._keyword_search(query, top_k)
+        # Expand query using LLM for better matching
+        expanded_query = self._expand_query_with_llm(query)
+        
+        # Use keyword search with expanded query
+        return self._keyword_search(expanded_query, top_k)
         
         # Embedding-based search (disabled for stability)
         # Uncomment below if you want to try embeddings (may cause crashes)
@@ -173,10 +187,75 @@ class SafeRAGChatbot:
         return self._keyword_search(query, top_k)
         """
     
+    def _expand_query_with_llm(self, query):
+        """Use LLM to understand query intent and generate better search terms."""
+        if self.model is None:
+            return query  # Fallback to original query
+        
+        try:
+            expansion_prompt = f"""Someone asked about nanny hiring: "{query}"
+
+Rephrase this question to include common related terms and concepts that might appear in nanny hiring guides. Keep it under 20 words.
+
+For example:
+- "how much do nannies charge hourly?" → "nanny hourly rate cost pay salary wages per hour"
+- "what questions to ask a nanny?" → "nanny interview questions ask hiring screening"
+
+Just give me the expanded search terms, nothing else:"""
+            
+            response = self.model.generate_content(
+                expansion_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.3,
+                    max_output_tokens=50,
+                ),
+            )
+            
+            if hasattr(response, 'text') and response.text:
+                expanded = response.text.strip()
+                print(f"Query expanded: '{query}' → '{expanded}'")
+                return expanded
+        except Exception as e:
+            print(f"Query expansion failed: {e}")
+        
+        return query  # Fallback to original
+    
     def is_relevant_question(self, question):
-        """Check if the question is relevant to nanny hiring."""
+        """Check if the question is relevant to nanny hiring using LLM."""
+        # First, quick keyword check
         question_lower = question.lower()
-        return any(keyword in question_lower for keyword in self.relevant_keywords)
+        has_keywords = any(keyword in question_lower for keyword in self.relevant_keywords)
+        
+        # If obvious keywords found, it's relevant
+        if has_keywords:
+            return True
+        
+        # Otherwise, use LLM to check if it's related to nanny hiring
+        if self.model is None:
+            return False  # Conservative fallback
+        
+        try:
+            relevance_prompt = f"""Is this question about hiring a nanny or childcare? Answer ONLY "yes" or "no".
+
+Question: "{question}"
+
+Answer (yes/no):"""
+            
+            response = self.model.generate_content(
+                relevance_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=10,
+                ),
+            )
+            
+            if hasattr(response, 'text') and response.text:
+                answer = response.text.strip().lower()
+                return 'yes' in answer
+        except Exception as e:
+            print(f"Relevance check failed: {e}")
+        
+        return False  # Conservative fallback
     
     def _clean_article_text(self, article_text):
         """Remove author names, dates, and metadata from article text."""
@@ -270,18 +349,18 @@ class SafeRAGChatbot:
                 context_parts.append(f"Article {i}:\n{article_text}")
         
         if not context_parts:
-            return "I couldn't extract meaningful content from the articles. Please refer to the linked articles for detailed information."
+            return "Hmm, having trouble pulling info from the articles. Check out the links below for all the details!"
         
         context = "\n\n".join(context_parts)
         
         # Create improved prompt that emphasizes content over metadata
         # Simplified prompt to avoid safety filters
-        prompt = f"""Based on the following articles about hiring a nanny, answer this question: {query}
+        prompt = f"""Hey! Someone's asking: "{query}"
 
-Articles:
+Here's the scoop from our guides:
 {context}
 
-Provide a clear answer in 3-5 sentences using only the information from the articles above. Focus on the content, not who wrote it."""
+Answer like you're texting a friend who needs advice - super casual and helpful. Use "you" and "your", throw in contractions (like "it's", "you'll", "don't"), and keep it short and sweet (3-5 sentences max). No corporate speak or fancy words. Just straight-up helpful info in a friendly way."""
         
         try:
             # Skip Gemini if model not available
@@ -300,10 +379,10 @@ Provide a clear answer in 3-5 sentences using only the information from the arti
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.2,  # Lower temperature for more focused answers
+                    temperature=0.7,  # Even higher for natural, conversational tone
                     max_output_tokens=300,  # Increased for better summaries
-                    top_p=0.8,
-                    top_k=40
+                    top_p=0.95,
+                    top_k=60
                 ),
                 safety_settings=safety_settings
             )
@@ -518,7 +597,7 @@ Provide a clear answer in 3-5 sentences using only the information from the arti
                 return answer.strip()
         
         # If no good sentences found, return a generic response
-        return "Based on the available information, please refer to the linked articles for detailed guidance."
+        return "Check out the articles below for the full details - they've got everything you need!"
     
     def chat(self, query):
         """Main chat function with comprehensive error handling."""
@@ -526,7 +605,7 @@ Provide a clear answer in 3-5 sentences using only the information from the arti
             # Check relevance
             if not self.is_relevant_question(query):
                 return {
-                    'answer': "I'm sorry, but I'm specifically designed to help with questions about hiring a nanny. Your question seems to be outside this scope. Please review our comprehensive guides at https://www.care.com/c/guides/hiring-a-nanny-guide/ or explore our other Articles and Guides on our website.",
+                    'answer': "Hey! I'm all about helping with nanny hiring stuff - that's my specialty. Your question seems a bit outside that area. Check out our guides at https://www.care.com/c/guides/hiring-a-nanny-guide/ or browse around Care.com for other topics!",
                     'links': [],
                     'sources': [],
                     'primary_link': None
@@ -537,7 +616,7 @@ Provide a clear answer in 3-5 sentences using only the information from the arti
             
             if not retrieved_docs:
                 return {
-                    'answer': "I couldn't find relevant information in our guides. Please check https://www.care.com/c/guides/hiring-a-nanny-guide/ for more comprehensive information.",
+                    'answer': "Hmm, I'm not finding anything on that in our guides right now. Try checking out https://www.care.com/c/guides/hiring-a-nanny-guide/ - there's tons of info there!",
                     'links': [],
                     'sources': [],
                     'primary_link': None
@@ -595,7 +674,7 @@ Provide a clear answer in 3-5 sentences using only the information from the arti
             import traceback
             traceback.print_exc()
             return {
-                'answer': f"I encountered an error: {str(e)}. Please try again.",
+                'answer': f"Oops, something went wrong on my end. Give it another shot?",
                 'links': [],
                 'sources': [],
                 'primary_link': None

@@ -640,7 +640,7 @@ else:
 st.markdown("""
     </div>
     <h1>We're here to help</h1>
-    <p>Ask me anything about hiring a nanny. I can help you find the right caregiver for your family.</p>
+    <p>Ask me anything about hiring a nanny - I'm here to make it easy!</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -655,9 +655,9 @@ if child_agent_img:
 
 st.markdown("""
     </div>
-    <div class="hero-title">HI I'm Nano, your Nanny Hiring Assistant</div>
+    <div class="hero-title">Hi, I'm Nano, your Nanny Hiring Assistant</div>
     <div class="hero-subtitle">
-        Get expert guidance on finding, interviewing, and hiring the perfect nanny for your family
+        I'll help you find, interview, and hire the perfect nanny for your family
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -681,13 +681,13 @@ with st.sidebar:
     
     st.markdown("""
     <div class="feature-card" style="margin-bottom: 0;">
-        <h3 style="margin-bottom: 0.25rem; margin-top: 0;">💡 What I can help with:</h3>
+        <h3 style="margin-bottom: 0.25rem; margin-top: 0;">💡 I can help you with:</h3>
         <ul style="text-align: left; margin-top: 0.25rem; margin-bottom: 0;">
             <li style="margin-bottom: 0.15rem;"><strong>Finding the right nanny</strong></li>
-            <li style="margin-bottom: 0.15rem;"><strong>Understanding costs and payment</strong></li>
-            <li style="margin-bottom: 0.15rem;"><strong>Interview questions and screening</strong></li>
-            <li style="margin-bottom: 0.15rem;"><strong>Safety checks and background checks</strong></li>
-            <li style="margin-bottom: 0;"><strong>Contracts and employment benefits</strong></li>
+            <li style="margin-bottom: 0.15rem;"><strong>Costs and payment</strong></li>
+            <li style="margin-bottom: 0.15rem;"><strong>Interview questions & screening</strong></li>
+            <li style="margin-bottom: 0.15rem;"><strong>Safety & background checks</strong></li>
+            <li style="margin-bottom: 0;"><strong>Contracts & benefits</strong></li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
