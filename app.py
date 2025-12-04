@@ -655,7 +655,7 @@ if child_agent_img:
 
 st.markdown("""
     </div>
-    <div class="hero-title">Nanny Hiring Assistant</div>
+    <div class="hero-title">HI I'm Nano, your Nanny Hiring Assistant</div>
     <div class="hero-subtitle">
         Get expert guidance on finding, interviewing, and hiring the perfect nanny for your family
     </div>
@@ -673,7 +673,7 @@ with st.sidebar:
     
     st.markdown("""
         <h2 style="color: #025747; margin-bottom: 0; margin-top: 0.25rem; font-weight: 700; font-size: 1.5rem;">Care.com</h2>
-        <h3 style="color: #025747; margin-bottom: 0; margin-top: 0; font-weight: 600; font-size: 1.1rem;">Nanny Hiring Assistant</h3>
+        <h3 style="color: #025747; margin-bottom: 0; margin-top: 0; font-weight: 600; font-size: 1.1rem;">Hi I'm Nano, your Nanny Hiring Assistant</h3>
     </div>
     """, unsafe_allow_html=True)
     
